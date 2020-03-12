@@ -126,15 +126,17 @@ find_completion( Prefix
       variables(Document);
     %% Check for "[...] fun atom"
     [{atom, _, _}, {'fun', _} | _] ->
-      definitions(Document, function, _ExportFormat = true);
+      bifs(_ExportFormat = true)
+        ++ definitions(Document, function, _ExportFormat = true);
     %% Check for "[...] atom"
     [{atom, _, Name} | _] ->
       NameBinary = atom_to_binary(Name, utf8),
       {ExportFormat, POIKind} = completion_context(Document, Line, Column),
       keywords()
-      ++ atoms(Document, NameBinary)
-      ++ modules(NameBinary)
-      ++ definitions(Document, POIKind, ExportFormat);
+        ++ bifs(ExportFormat)
+        ++ atoms(Document, NameBinary)
+        ++ modules(NameBinary)
+        ++ definitions(Document, POIKind, ExportFormat);
     _ ->
       []
   end;
@@ -278,9 +280,30 @@ keywords() ->
              , 'bsr', 'bxor', 'case', 'catch', 'cond', 'div', 'end', 'fun'
              , 'if', 'let', 'not', 'of', 'or', 'orelse', 'receive', 'rem'
              , 'try', 'when', 'xor'],
+
   [ #{ label => atom_to_binary(K, utf8)
      , kind  => ?COMPLETION_ITEM_KIND_KEYWORD
      } || K <- Keywords ].
+
+%%==============================================================================
+%% Built-in functions
+%%==============================================================================
+
+-spec bifs(boolean()) -> [map()].
+bifs(ExportFormat) ->
+  Range   = #{from => {0, 0}, to => {0, 0}},
+  Exports = erlang:module_info(exports),
+  BIFs    = [ #{ kind  => function
+               , id    => X
+               , range => Range
+               , data  => generate_arguments(A)
+               }
+             || {F, A} = X <- Exports, erl_internal:bif(F, A)],
+  [completion_item(X, ExportFormat) || X <- BIFs].
+
+-spec generate_arguments(integer()) -> [{integer(), string()}].
+generate_arguments(Arity) ->
+  [{N, "Arg" ++ integer_to_list(N)} || N <- lists:seq(1, Arity)].
 
 %%==============================================================================
 %% Filter by prefix
@@ -308,7 +331,7 @@ to_binary(X) when is_binary(X) ->
 %% Helper functions
 %%==============================================================================
 
--spec completion_item(poi(), boolean()) -> map().
+-spec completion_item(poi(), ExportFormat :: boolean()) -> map().
 completion_item(#{kind := Kind, id := {F, A}, data := ArgsNames}, false)
   when Kind =:= function;
        Kind =:= type_definition ->

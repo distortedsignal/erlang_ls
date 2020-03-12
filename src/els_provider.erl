@@ -15,6 +15,8 @@
         ]).
 
 -callback is_enabled() -> boolean().
+-callback init(state()) -> state().
+-callback handle_request(request(), state()) -> boolean().
 
 -type config()   :: any().
 -type provider() :: els_completion_provider
